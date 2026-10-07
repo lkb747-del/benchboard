@@ -800,6 +800,8 @@ function renderRoster(){
 
 /* ---------- 데이터 옮기기 (내보내기·가져오기) ---------- */
 const XS={msg:null,code:'',pending:null,paste:false};
+let DL=null; // 아티팩트 뷰어 안에서는 downloads 기능으로 파일 저장
+try{if(window.claude&&window.claude.use) window.claude.use('downloads').then(d=>{DL=d;}).catch(()=>{});}catch(e){}
 const XKEYS=['players','lineup','liberoFor','receivers','settings','nextServe','match','recvCustom','adCustom'];
 function exportObj(){const d={}; XKEYS.forEach(k=>d[k]=S[k]); return {app:'benchboard',v:1,exportedAt:new Date().toISOString(),data:d};}
 function exportText(){return JSON.stringify(exportObj());}
@@ -861,6 +863,8 @@ const ACT={
   xcopy:()=>{const txt=exportText(); XS.msg={t:'info',m:'코드를 복사했습니다. 카카오톡 등에 붙여 넣어 보내세요.'}; XS.code='';
     try{navigator.clipboard.writeText(txt).catch(()=>{XS.code=txt; XS.msg={t:'warn',m:'자동 복사가 막혀 있습니다. 아래 칸의 코드를 직접 복사하세요.'}; render();});}catch(e){XS.code=txt; XS.msg={t:'warn',m:'자동 복사가 막혀 있습니다. 아래 칸의 코드를 직접 복사하세요.'};}},
   xfile:()=>{const txt=exportText(); const name=`벤치보드-${stamp()}.json`;
+    if(DL){XS.msg=null; DL.save({filename:name,data:txt}).then(()=>{XS.msg={t:'info',m:`${name} 파일을 저장했습니다.`}; render();})
+      .catch(e=>{if(e&&e.code==='declined') return; XS.code=txt; XS.msg={t:'warn',m:'파일 저장이 안 됐습니다. 아래 코드를 복사하세요.'}; render();}); return;}
     try{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
       XS.msg={t:'info',m:`${name} 파일을 저장했습니다. 저장되지 않았다면 '코드 복사'를 쓰세요.`};}catch(e){XS.code=txt; XS.msg={t:'warn',m:'이 화면에서는 파일 저장이 안 됩니다. 아래 코드를 복사하세요.'};}},
   xshare:()=>{const txt=exportText(); const name=`벤치보드-${stamp()}.json`;
