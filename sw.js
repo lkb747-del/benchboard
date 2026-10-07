@@ -1,5 +1,5 @@
 // 벤치보드 서비스 워커: 앱 파일은 미리 저장, 글꼴은 처음 받을 때 저장 → 체육관에서 인터넷 없이 실행
-const VERSION = 'benchboard-v1';
+const VERSION = 'benchboard-v2';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

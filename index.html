@@ -576,7 +576,7 @@ function renderMatch(){
   if(!c){
     h+=`<div class="card"><p class="eyebrow">경기</p><h3>${sets.length?`${sets.length}세트까지 끝났습니다 · 세트 ${won}:${lost}`:'세트가 아직 시작되지 않았습니다'}</h3>
       <p class="small muted" style="margin:0 0 10px">선수단·라인업 탭에서 선발 6명과 첫 서브를 정한 뒤 세트를 시작하세요.</p>
-      <div class="row"><button class="btn pri" data-act="tab" data-t="roster">라인업 정하러 가기</button>${lineupProblems().length?'':`<button class="btn dark" data-act="start">${sets.length+1}세트 바로 시작</button>`}</div>
+      <div class="row"><button class="btn pri" data-act="tab" data-t="roster">라인업 정하러 가기</button><button class="btn" data-act="gotransfer">데이터 옮기기</button>${lineupProblems().length?'':`<button class="btn dark" data-act="start">${sets.length+1}세트 바로 시작</button>`}</div>
       ${sets.length?`<div class="pills" style="margin-top:10px">${sets.map((s,i)=>`<span class="pill">${i+1}세트 <span class="tag">${s.us}:${s.them}</span></span>`).join('')}</div>`:''}</div>`;
     h+=rulesSub();
     $('#pMatch').innerHTML=h; return;
@@ -588,7 +588,7 @@ function renderMatch(){
     <div class="team ${c.serving==='them'?'srv':''}">${c.serving==='them'?'<span class="srvtag">● 서브</span>':''}<span class="tname">상대</span><span class="pts">${c.them}</span></div></div>
     <div class="ptbtns"><button class="btn pri" data-act="pt" data-side="us" ${over?'disabled':''}>우리 득점</button><button class="btn dark" data-act="pt" data-side="them" ${over?'disabled':''}>상대 득점</button><button class="btn" data-act="undo" ${H.length?'':'disabled'} aria-label="되돌리기">↶</button></div>
     ${over?`<div class="row" style="margin-top:10px"><button class="btn pri" data-act="finish">${c.setNo}세트 ${c.us}:${c.them} 확정 → 다음 세트 준비</button></div>`:''}
-    <div class="row" style="margin-top:10px"><button class="btn sm" data-act="gocheck" data-to="recv">R${c.rot+1} 리시브·서브 대형 점검 →</button><button class="btn sm" data-act="gocheck" data-to="ad">R${c.rot+1} 공수 대형 →</button></div></div>`;
+    <div class="row" style="margin-top:10px"><button class="btn sm" data-act="gocheck" data-to="recv">R${c.rot+1} 리시브·서브 대형 점검 →</button><button class="btn sm" data-act="gocheck" data-to="ad">R${c.rot+1} 공수 대형 →</button><button class="btn sm" data-act="gotransfer">다른 기기로 보내기</button></div></div>`;
   h+=noticeHTML();
 
   // 리베로
@@ -794,8 +794,43 @@ function renderRoster(){
     <div class="checkrow">${['MB','OH','OPP','S','DS'].map(r=>`<label><input type="checkbox" id="lf-${r}" data-ch="libfor" data-r="${r}" ${S.liberoFor.includes(r)?'checked':''}> ${ROLE[r]}</label>`).join('')}</div>
     <div class="checkrow" style="margin-top:10px"><label><input type="checkbox" id="libServe" data-ch="libServe" ${S.settings.liberoServe?'checked':''}> 리베로 서브 허용 (FIVB는 불가 · 대회 요강이 허용할 때만)</label></div>
     <p class="small muted" style="margin:10px 0 0">학교·생활체육 대회는 교체 횟수나 리베로 규정을 따로 정하기도 합니다. 대회 요강에 맞춰 바꾸세요.</p></div>`;
+  h+=transferCard();
   $('#pRoster').innerHTML=h;
 }
+
+/* ---------- 데이터 옮기기 (내보내기·가져오기) ---------- */
+const XS={msg:null,code:'',pending:null,paste:false};
+const XKEYS=['players','lineup','liberoFor','receivers','settings','nextServe','match','recvCustom','adCustom'];
+function exportObj(){const d={}; XKEYS.forEach(k=>d[k]=S[k]); return {app:'benchboard',v:1,exportedAt:new Date().toISOString(),data:d};}
+function exportText(){return JSON.stringify(exportObj());}
+function stamp(){const t=new Date(),p=n=>String(n).padStart(2,'0'); return `${t.getFullYear()}${p(t.getMonth()+1)}${p(t.getDate())}-${p(t.getHours())}${p(t.getMinutes())}`;}
+function summarize(d){
+  const m=d.match; const sets=m&&m.sets?m.sets.length:0; const c=m&&m.cur;
+  return `선수 ${d.players.length}명`+(sets?` · 끝난 세트 ${sets}개`:'')+(c?` · ${c.setNo}세트 진행 중 ${c.us}:${c.them}`:'')+(m?'':' · 경기 기록 없음');
+}
+function parseImport(txt){
+  let o; try{o=JSON.parse(String(txt).trim());}catch(e){return {err:'읽을 수 없는 내용입니다. 내보내기로 만든 코드 전체를 빠짐없이 붙여 넣으세요.'};}
+  if(!o||o.app!=='benchboard'||!o.data||!Array.isArray(o.data.players)) return {err:'벤치보드에서 내보낸 데이터가 아닙니다.'};
+  return {obj:o};
+}
+function transferCard(){
+  const p=XS.pending;
+  let h=`<div class="card" id="transfer"><h3>데이터 옮기기 <span class="sub">다른 기기에서 같은 선수단과 경기 기록 보기</span></h3>
+    <p class="small muted" style="margin:0 0 10px">이 기기에서 내보낸 뒤, 다른 기기의 벤치보드에서 가져오기 하세요. 내용은 서버에 올라가지 않고 보내는 사람이 고른 곳(카카오톡, 파일)으로만 갑니다.</p>
+    <p class="eyebrow">내보내기 · ${esc(summarize(exportObj().data))}</p>
+    <div class="row"><button class="btn pri" data-act="xshare">공유하기</button><button class="btn" data-act="xcopy">코드 복사</button><button class="btn" data-act="xfile">파일로 저장</button></div>`;
+  if(XS.code) h+=`<textarea id="xcode" readonly rows="3" style="width:100%;margin-top:8px;font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:8px;padding:6px;background:var(--soft)">${esc(XS.code)}</textarea><p class="small muted" style="margin:4px 0 0">자동 복사가 안 되면 위 칸을 길게 눌러 전체 선택 후 복사하세요.</p>`;
+  h+=`<p class="eyebrow" style="margin-top:16px">가져오기</p>
+    <div class="row"><label class="btn" for="xin" style="display:inline-block">파일 열기</label><input type="file" id="xin" data-ch="xfilein" accept=".json,application/json,text/plain" style="position:absolute;width:1px;height:1px;opacity:0"><button class="btn" data-act="xpaste">코드 붙여넣기</button></div>`;
+  if(XS.paste&&!p) h+=`<textarea id="xpastebox" rows="4" placeholder="받은 코드를 여기에 붙여 넣으세요" style="width:100%;margin-top:8px;font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--panel)"></textarea><div class="row" style="margin-top:6px"><button class="btn sm pri" data-act="xcheck">내용 확인</button></div>`;
+  if(p){const d=p.data; h+=`<div class="notice info" style="margin-top:10px"><b>가져올 데이터</b><span>${esc(summarize(d))} · ${esc(new Date(p.exportedAt).toLocaleString('ko-KR'))}에 내보냄</span>
+      <span class="small">지금 이 기기의 데이터는 바뀝니다. 필요하면 먼저 이 기기 데이터를 내보내 두세요.</span>
+      <div class="row" style="margin-top:6px"><button class="btn sm pri" data-act="ximport" data-m="all">전체 가져오기 (경기 기록 포함)</button><button class="btn sm" data-act="ximport" data-m="roster">선수단·라인업만</button><button class="btn sm" data-act="xcancel">취소</button></div></div>`;}
+  if(XS.msg) h+=`<div class="notice ${XS.msg.t}" style="margin-top:10px">${esc(XS.msg.m)}</div>`;
+  return h+`</div>`;
+}
+function xcopyFallback(txt){XS.code=txt;}
+function xsetPending(txt){const r=parseImport(txt); if(r.err){XS.msg={t:'bad',m:r.err}; XS.pending=null;} else {XS.pending=r.obj; XS.msg=null; XS.paste=false;}}
 
 /* ---------- 이벤트 ---------- */
 const ACT={
@@ -822,7 +857,27 @@ const ACT={
   clearex:()=>{S.example=false;},
   resetask:()=>{S.view.resetAsk=true},
   resetno:()=>{S.view.resetAsk=false},
-  reset:()=>{S.match=null; S.notice=[]; H=[]; S.view.resetAsk=false; S.nextServe='them';}
+  reset:()=>{S.match=null; S.notice=[]; H=[]; S.view.resetAsk=false; S.nextServe='them';},
+  xcopy:()=>{const txt=exportText(); XS.msg={t:'info',m:'코드를 복사했습니다. 카카오톡 등에 붙여 넣어 보내세요.'}; XS.code='';
+    try{navigator.clipboard.writeText(txt).catch(()=>{XS.code=txt; XS.msg={t:'warn',m:'자동 복사가 막혀 있습니다. 아래 칸의 코드를 직접 복사하세요.'}; render();});}catch(e){XS.code=txt; XS.msg={t:'warn',m:'자동 복사가 막혀 있습니다. 아래 칸의 코드를 직접 복사하세요.'};}},
+  xfile:()=>{const txt=exportText(); const name=`벤치보드-${stamp()}.json`;
+    try{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
+      XS.msg={t:'info',m:`${name} 파일을 저장했습니다. 저장되지 않았다면 '코드 복사'를 쓰세요.`};}catch(e){XS.code=txt; XS.msg={t:'warn',m:'이 화면에서는 파일 저장이 안 됩니다. 아래 코드를 복사하세요.'};}},
+  xshare:()=>{const txt=exportText(); const name=`벤치보드-${stamp()}.json`;
+    if(!navigator.share){XS.code=txt; XS.msg={t:'warn',m:'이 기기에서는 공유하기를 쓸 수 없습니다. 코드 복사나 파일 저장을 쓰세요.'}; return;}
+    let data={title:'벤치보드 데이터',text:txt};
+    try{const f=new File([txt],name,{type:'application/json'}); if(navigator.canShare&&navigator.canShare({files:[f]})) data={title:'벤치보드 데이터',files:[f]};}catch(e){}
+    navigator.share(data).catch(err=>{if(err&&err.name==='AbortError') return; XS.code=txt; XS.msg={t:'warn',m:'공유하기가 열리지 않았습니다. 아래 코드를 복사해 보내세요.'}; render();});},
+  gotransfer:()=>{S.view.tab='roster'; setTimeout(()=>{const el=$('#transfer'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});},50);},
+  xpaste:()=>{XS.paste=true; XS.pending=null; XS.msg=null; setTimeout(()=>{const t=$('#xpastebox'); if(t) t.focus();},0);},
+  xcheck:()=>{const t=$('#xpastebox'); xsetPending(t?t.value:'');},
+  xcancel:()=>{XS.pending=null; XS.msg=null;},
+  ximport:d=>{const p=XS.pending; if(!p) return; const src=p.data;
+    if(d.m==='all'){XKEYS.forEach(k=>{if(src[k]!==undefined) S[k]=src[k];}); H=[]; S.notice=[];}
+    else{['players','lineup','liberoFor','receivers','settings'].forEach(k=>{if(src[k]!==undefined) S[k]=src[k];});
+      if(S.match&&S.match.cur){/* 진행 중 세트의 선수가 사라지지 않도록 확인 */ const ids=new Set(S.players.map(x=>x.id)); if(Object.values(S.match.cur.court).some(id=>!ids.has(id))){S.match=null; H=[];}}}
+    S.settings=Object.assign(def().settings,S.settings||{}); S.example=false; S.recvCustom=S.recvCustom||{}; S.adCustom=S.adCustom||{};
+    XS.pending=null; XS.msg={t:'info',m:d.m==='all'?'가져왔습니다. 경기 화면에서 이어서 진행할 수 있습니다.':'선수단과 라인업을 가져왔습니다.'};}
 };
 const CH={
   subOut:t=>{S.view.subOut=t.value; if(S.view.subIn&&!subCheck(t.value,S.view.subIn,S.view.subExc).ok) S.view.subIn='';},
@@ -837,7 +892,8 @@ const CH={
   precv:t=>{const id=t.dataset.id; S.receivers=S.receivers.filter(x=>x!==id); if(t.checked) S.receivers.push(id); S.recvCustom={};},
   set:t=>{const v=parseInt(t.value,10); if(v>0) S.settings[t.dataset.k]=v;},
   libfor:t=>{const r=t.dataset.r; S.liberoFor=S.liberoFor.filter(x=>x!==r); if(t.checked) S.liberoFor.push(r); S.recvCustom={};},
-  libServe:t=>{S.settings.liberoServe=t.checked}
+  libServe:t=>{S.settings.liberoServe=t.checked},
+  xfilein:t=>{const f=t.files&&t.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{xsetPending(rd.result); render(); const el=$('#transfer'); if(el) el.scrollIntoView({block:'nearest'});}; rd.onerror=()=>{XS.msg={t:'bad',m:'파일을 읽지 못했습니다.'}; render();}; rd.readAsText(f); t.value='';}
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-act]'); if(!b||b.disabled) return; const f=ACT[b.dataset.act]; if(!f) return; f(b.dataset,b); save(); render();});
 document.addEventListener('change',e=>{const t=e.target; const f=t.dataset&&CH[t.dataset.ch]; if(!f) return; f(t); save(); render();});
